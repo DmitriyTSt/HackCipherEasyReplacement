@@ -4,11 +4,19 @@ import kotlin.math.pow
 import kotlin.random.Random
 
 class HackCipher(private val text: String) {
+    companion object {
+        private const val MIN_FITNESS_CHAR = 0.0008
+        private const val MIN_FITNESS_WORD = 50
+    }
     private var getDecoded = HashMap<Char, Char>()
     private var currentPermutation = RussianLang.ALPHABET.toList().shuffled()
     private var swapIdx1 = 0
     private var swapIdx2 = 0
-
+    private val dictionary = loadDictionary()
+    private val badWords = ArrayList<String>()
+    private var needAddThisWordToBad = false
+    private var successChangePermutationByWords = false
+    private var endOfPermutations = false
 
     init {
         getDecoded.clear()
@@ -58,7 +66,9 @@ class HackCipher(private val text: String) {
         var fitness = fitness(applyPermutationToText())
 
         var it = 0
-        while (fitness > 0.0005) {
+        // пороговое значение, до которого сбрасываем с помощью похожести частот одного символа
+        while (fitness > MIN_FITNESS_CHAR) {
+//        while (it < 5000) {
             nextPermutation()
             val newFitness = fitness(applyPermutationToText())
             if (newFitness > fitness) {
@@ -71,17 +81,25 @@ class HackCipher(private val text: String) {
         }
 
         var fitnessWords = fitnessWord(applyPermutationToText())
-        while (fitnessWords > 100 ) {
-            nextPermutation()
+        // пороговое значение совпадения слов, при 0 - все слова из словаря
+        while (fitnessWords > MIN_FITNESS_WORD && !endOfPermutations) {
+            successChangePermutationByWords = false
+            nextPermutationByWords(applyPermutationToText())
             val newFitnessWords = fitnessWord(applyPermutationToText())
-            if (newFitnessWords > fitnessWords) {
-                rollbackPermutation()
+            if (newFitnessWords >= fitnessWords) {
+                if (successChangePermutationByWords) {
+                    rollbackPermutation()
+                }
+                needAddThisWordToBad = true
             } else {
+                // если вдруг смогли спуститься вниз, то почистим слова, чтобы обрабатывать их потом, так как они изменились
+                badWords.clear()
                 fitnessWords = newFitnessWords
             }
             println("Шаг $it, newFitnessWords $fitnessWords")
             it++
         }
+        println(badWords)
         return applyPermutationToText()
     }
 
@@ -101,25 +119,80 @@ class HackCipher(private val text: String) {
         return fitness
     }
 
+    private fun nextPermutationByWords(testText: String) {
+        val testWords = testText.split(Regex("[^а-яА-Я]")).filter { it.isNotEmpty() }.sortedByDescending { it.length }
+
+        nextPermutationByWords(testWords, 1)
+    }
+
+    private fun nextPermutationByWords(testWords: List<String>, currentMinDiff: Int) {
+        println("NEXT WORDS PERMUTATION min: $currentMinDiff, badWordsSize: ${badWords.size}")
+        val someWord = testWords.find { findMinDiffWord(it).first == currentMinDiff && !badWords.contains(it) }
+        if (someWord != null) {
+            if (needAddThisWordToBad) {
+                badWords.add(someWord)
+                needAddThisWordToBad = false
+            }
+            val needWord = findMinDiffWord(someWord).second
+            var iter = 0
+            while (someWord[iter] == needWord[iter]) {
+                iter++
+            }
+            val oldChar = someWord[iter]
+            val needChar = needWord[iter]
+            swapIdx1 = RussianLang.ALPHABET.indexOf(oldChar)
+            swapIdx2 = RussianLang.ALPHABET.indexOf(needChar)
+            if (swapIdx1 != -1 && swapIdx2 != -1) {
+                // меняем в перестановке
+                val newPermutation = currentPermutation.toMutableList()
+                val char1 = newPermutation[swapIdx1]
+                newPermutation[swapIdx1] = newPermutation[swapIdx2]
+                newPermutation[swapIdx2] = char1
+                currentPermutation = newPermutation
+                // меняем в мапе
+                val value1 = getDecoded[char1]!!
+                getDecoded[char1] = getDecoded[newPermutation[swapIdx1]]!!
+                getDecoded[newPermutation[swapIdx1]] = value1
+                successChangePermutationByWords = true
+            } else {
+                badWords.add(someWord)
+                println("ERROR find char $oldChar or $needChar")
+            }
+        } else {
+            if (currentMinDiff < 49) {
+                nextPermutationByWords(testWords, currentMinDiff + 1)
+            } else {
+                endOfPermutations = true
+                println("Error find word for correct")
+            }
+        }
+    }
+
     private fun fitnessWord(testText: String): Double {
         val testWords = testText.split(Regex("[^а-яА-Я]")).filter { it.isNotEmpty() }
 
         val startTime = System.currentTimeMillis()
-        val dictionary = loadDictionary()
+
         val minWordDiff = testWords.stream()
             .parallel()
             .mapToDouble { word ->
-                var min = 50 // максимальная разница в слове
-                dictionary[word.length]?.forEach {
-                    val wordDiff = wordDiff(word, it)
-                    if (wordDiff < min) {
-                        min = wordDiff
-                    }
-                }
-                min.toDouble() / word.length
+                findMinDiffWord(word).first.toDouble() / word.length
             }
         println("Fitness word time: ${(System.currentTimeMillis() - startTime) / 1000} s")
         return minWordDiff.sum()
+    }
+
+    private fun findMinDiffWord(word: String): Pair<Int, String> {
+        var min = 50 // максимальная разница в слове
+        var rightWord = ""
+        dictionary[word.length]?.forEach {
+            val wordDiff = wordDiff(word, it)
+            if (wordDiff < min) {
+                min = wordDiff
+                rightWord = it
+            }
+        }
+        return Pair(min, rightWord)
     }
 
     /**
