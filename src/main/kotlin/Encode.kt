@@ -20,7 +20,7 @@ class Encode(private val text: String, permutation: List<Char> = RussianLang.ALP
         text.forEach {
             val origIsUpperCase = it.isUpperCase()
             val oldChar = it.toLowerCase()
-            if (it in RussianLang.ALPHABET) {
+            if (oldChar in RussianLang.ALPHABET) {
                 val newChar = if (encode) {
                     getEncoded[oldChar]
                 } else {

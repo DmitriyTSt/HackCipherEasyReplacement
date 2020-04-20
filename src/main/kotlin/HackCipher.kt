@@ -5,8 +5,7 @@ import kotlin.random.Random
 
 class HackCipher(private val text: String) {
     companion object {
-        private const val MIN_FITNESS_CHAR = 0.0008
-        private const val MIN_FITNESS_WORD = 50
+        private const val MIN_FITNESS_CHAR = 0.0009
     }
     private var getDecoded = HashMap<Char, Char>()
     private var currentPermutation = RussianLang.ALPHABET.toList().shuffled()
@@ -82,7 +81,7 @@ class HackCipher(private val text: String) {
 
         var fitnessWords = fitnessWord(applyPermutationToText())
         // пороговое значение совпадения слов, при 0 - все слова из словаря
-        while (fitnessWords > MIN_FITNESS_WORD && !endOfPermutations) {
+        while (fitnessWords > text.length.toFloat() / 1000 && !endOfPermutations) {
             successChangePermutationByWords = false
             nextPermutationByWords(applyPermutationToText())
             val newFitnessWords = fitnessWord(applyPermutationToText())
@@ -100,6 +99,7 @@ class HackCipher(private val text: String) {
             it++
         }
         println(badWords)
+        println(currentPermutation.joinToString(""))
         return applyPermutationToText()
     }
 
