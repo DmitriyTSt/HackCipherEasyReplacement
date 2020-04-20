@@ -8,7 +8,7 @@ class HackCipher(private val text: String) {
         private const val MIN_FITNESS_CHAR = 0.0009
     }
     private var getDecoded = HashMap<Char, Char>()
-    private var currentPermutation = RussianLang.ALPHABET.toList().shuffled()
+    private var currentPermutation: List<Char>
     private var swapIdx1 = 0
     private var swapIdx2 = 0
     private val dictionary = loadDictionary()
@@ -18,6 +18,11 @@ class HackCipher(private val text: String) {
     private var endOfPermutations = false
 
     init {
+        val sortedCurrentFreq = calculateFreq(text).toList().sortedBy { it.second }
+        val sortedOriginalFreq = RussianLang.freq.toList().sortedBy { it.second }
+        val permutationList = sortedCurrentFreq.zip(sortedOriginalFreq).map { it.first.first to it.second.first }
+        currentPermutation = permutationList.sortedBy { RussianLang.ALPHABET.indexOf(it.second) }.map { it.first }
+
         getDecoded.clear()
         getDecoded.apply {
             currentPermutation.forEachIndexed { index, c ->
